@@ -5,9 +5,7 @@
 #### Following is the demo and architecture.
 
 
-<video  autoply>
-  <source src="./assets/ai_extension_demo_1.mp4" type="video/mp4">
-</video>
+<img src="./assets/ai_extension_demo_1.gif" alt="Image">
 
 ### Code search pipeline with LLAMA2
 
