@@ -1,0 +1,79 @@
+{
+  "name": "smart-search",
+  "displayName": "Smart search",
+  "description": "Allows you to search in codebase using natural language",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.88.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "smart-search",
+          "title": "Smart search",
+          "icon": "src/static/dark-icon.png"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "smart-search.searchFiles",
+        "title": "Search Files"
+      },
+      {
+        "command": "smart-search.updateSearchResults",
+        "title": "Update search results"
+      }
+    ],
+    "views": {
+      "smart-search": [
+        {
+          "type": "webview",
+          "id": "showFileExplorerView",
+          "name": "Smart search"
+        }
+      ]
+    },
+    "activationEvents": [
+      "onUri"    ]
+  },
+
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "18.x",
+    "@types/vscode": "^1.88.0",
+    "@typescript-eslint/eslint-plugin": "^7.4.0",
+    "@typescript-eslint/parser": "^7.4.0",
+    "@vscode/test-cli": "^0.0.8",
+    "@vscode/test-electron": "^2.3.9",
+    "eslint": "^8.57.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@babel/generator": "^7.24.4",
+    "@babel/parser": "^7.24.4",
+    "@babel/preset-typescript": "^7.24.1",
+    "@babel/types": "^7.24.0",
+    "@types/uuid": "^9.0.8",
+    "chromadb": "^1.8.1",
+    "chromadb-default-embed": "^2.13.2",
+    "gpt-tokenizer": "^2.1.2",
+    "node-fetch": "^3.3.2",
+    "openai": "^4.38.2",
+    "uuid": "^9.0.1"
+  }
+}
