@@ -1,11 +1,19 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ActivityBarViewProvider = void 0;
 const chroma_1 = require("./clients/chroma");
+const gemini_1 = require("./clients/gemini");
+const creds_1 = require("./creds");
+const llama_embed_api_1 = __importDefault(require("./clients/llama_embed_api"));
+const llamaEmbedApi = new llama_embed_api_1.default();
 class ActivityBarViewProvider {
     _view;
     // <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/prism.js"></script>
     //<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.css" rel="stylesheet" />
+    _chromaCollection;
     async resolveWebviewView(webviewView, _context, _token) {
         this._view = webviewView;
         this._view.webview.options = {
@@ -15,10 +23,10 @@ class ActivityBarViewProvider {
         this._view.webview.html = this._getHtmlContent();
         this._view.webview.onDidReceiveMessage(async (message) => {
             const searchQuery = message.searchQuery;
-            console.log('Message', JSON.stringify(message, null, 2));
             if (message.command === 'searchFiles') {
                 console.log('Searching for ......', searchQuery);
                 const searchResults = await this.searchInFiles(searchQuery);
+                console.log('Search results', searchResults);
                 this._view?.webview.postMessage({ command: 'updateSearchResults', searchResults: searchResults });
             }
             else {
@@ -27,19 +35,11 @@ class ActivityBarViewProvider {
         });
     }
     async searchInFiles(searchQuery) {
-        const dbResults = await (0, chroma_1.querySnippetsFromVectorStore)(searchQuery);
-        const response = await fetch("http://localhost:5000/document_grader", {
-            method: "POST",
-            body: JSON.stringify({
-                searchQuery: searchQuery,
-                documents: dbResults
-            }),
-            headers: {
-                "Content-Type": "application/json"
-            }
-        }).then(res => res.json());
-        console.log('RES', response.result.map(r => r));
-        return response.result;
+        if (!this._chromaCollection) {
+            this._chromaCollection = await chroma_1.client.getCollection({ name: creds_1.CHROMA_COLLECTION_NAME, embeddingFunction: llamaEmbedApi });
+        }
+        const dbResults = await (0, chroma_1.querySnippetsFromVectorStore)(searchQuery, this._chromaCollection);
+        return (0, gemini_1.geminiDocumentGrader)(searchQuery, dbResults);
     }
     _getHtmlContent() {
         return `
@@ -127,11 +127,11 @@ class ActivityBarViewProvider {
             </div>
             <script>
 
+                let buttonTimeout;
 
-
-                function setButtonState(disabled) {
+                function setButtonState(state) {
                     const searchButton = document.getElementById('searchButton')
-                      searchButton.disabled = disabled;
+                      searchButton.disabled = state;
                 }
                 const vscode = acquireVsCodeApi();
                 const searchButton = document.getElementById('searchButton')
@@ -145,6 +145,15 @@ class ActivityBarViewProvider {
                 function updateSearchResults(searchResults) {
                     clearSearchResults();
                     const searchResultsList = document.getElementById('searchResults');
+
+                    if(searchResults.length == 0){
+                        const listElement = document.createElement('li');
+
+                        listElement.textContent = 'No result found';
+
+                        searchResultsList.appendChild(listElement)
+                        return 
+                    }
                     searchResults.forEach(result => {
                         const li = document.createElement('li');
                         const link = document.createElement('a');
@@ -165,26 +174,21 @@ class ActivityBarViewProvider {
                     const message = event.data;
                     if (message.command === 'updateSearchResults') {
                         updateSearchResults(message.searchResults);
-
+                        // buttonTimeout?.clearTimeout()
                         document.getElementById('searchButton').textContent= 'Search'
                     } 
                 });
                 searchButton.addEventListener('click', (e) =>{
+                    console.log('Searching')
                     clearSearchResults();
                     const searchQuery =  document.getElementById('searchInput').value;
                     vscode.postMessage({ command: 'searchFiles', searchQuery: searchQuery });
-                    setButtonState(true);
+                    // setButtonState(true);
                     document.getElementById('searchButton').textContent= 'Searching.........'
-                })
-
-
-                searchButton.addEventListener('change', (e) =>{
-                    const searchQuery =  document.getElementById('searchInput').value;
-                    if(searchQuery.length > 0){
-                        setButtonState(false);
-                    }else{
-                        setButtonState(true);
-                    }
+                    // buttonTimeout = setTimeOut(() =>{
+                    //     setButtonState(false);
+                    //     document.getElementById('searchButton').textContent= 'Search'
+                    // },3000)
                 })
             </script>
         </body>

@@ -1,18 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 class LlamaEmbedApi {
-    async generate(texts) {
-        console.log('Texts', texts.length);
-        const embeddings = await fetch("http://localhost:5000/code_to_embedding", {
+    async generate(documents) {
+        console.log('Indexing snippets...', 'Count: ', documents.length);
+        const embeddings = await fetch("http://localhost:5000/create-embedding", {
             method: "POST",
             body: JSON.stringify({
-                query: texts
+                documents: documents
             }),
             headers: {
                 "Content-Type": "application/json"
             }
         }).then(res => res.json());
-        console.log('RES', embeddings.result.map(r => r));
         return embeddings.result;
     }
     ;

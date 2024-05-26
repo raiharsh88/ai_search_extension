@@ -1,11 +1,18 @@
 import * as vscode from 'vscode';
 import { SearchResult } from './types/interfaces';
-import { querySnippetsFromVectorStore } from './clients/chroma';
+import { client, querySnippetsFromVectorStore } from './clients/chroma';
+import { geminiDocumentGrader } from './clients/gemini';
+import { CHROMA_COLLECTION_NAME } from './creds';
+import { Collection } from 'chromadb';
+import LlamaEmbedApi from './clients/llama_embed_api';
+const llamaEmbedApi = new LlamaEmbedApi();
 
 export class ActivityBarViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     // <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/prism.js"></script>
     //<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.css" rel="stylesheet" />
+    
+    private _chromaCollection?:Collection
     
     public async resolveWebviewView(webviewView: vscode.WebviewView, _context: vscode.WebviewViewResolveContext, _token: vscode.CancellationToken) {
         this._view = webviewView;
@@ -14,35 +21,26 @@ export class ActivityBarViewProvider implements vscode.WebviewViewProvider {
                 };
         // Set the HTML content for the activity bar view
         this._view.webview.html = this._getHtmlContent();
-        
         this._view.webview.onDidReceiveMessage(async message => {
             const searchQuery = message.searchQuery;
-			console.log('Message',JSON.stringify(message,null ,2))
             if (message.command === 'searchFiles') {
                 console.log('Searching for ......', searchQuery)
                 const searchResults = await this.searchInFiles(searchQuery);
+                console.log('Search results' ,searchResults)
                 this._view?.webview.postMessage({ command: 'updateSearchResults', searchResults: searchResults });
             }else{
                 console.log('Message', JSON.stringify(message, null, 2))
             }
-    });
+        });
     }
 
     private async searchInFiles(searchQuery: string):Promise< SearchResult[]> {
-            const dbResults = await querySnippetsFromVectorStore(searchQuery);
-            const response = await fetch("http://localhost:5000/document_grader", {
-                method: "POST",
-                body: JSON.stringify({
-                    searchQuery: searchQuery,
-                    documents: dbResults
-                }),
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            }).then(res => res.json());
-            console.log('RES',response.result.map(r => r));
-            return response.result
+            if(!this._chromaCollection){
+                this._chromaCollection = await client.getCollection({name:CHROMA_COLLECTION_NAME, embeddingFunction:llamaEmbedApi});
+            }
+            const dbResults = await querySnippetsFromVectorStore(searchQuery, this._chromaCollection);
 
+            return geminiDocumentGrader(searchQuery, dbResults);
     }
 
     private _getHtmlContent(): string {
@@ -131,11 +129,11 @@ export class ActivityBarViewProvider implements vscode.WebviewViewProvider {
             </div>
             <script>
 
+                let buttonTimeout;
 
-
-                function setButtonState(disabled) {
+                function setButtonState(state) {
                     const searchButton = document.getElementById('searchButton')
-                      searchButton.disabled = disabled;
+                      searchButton.disabled = state;
                 }
                 const vscode = acquireVsCodeApi();
                 const searchButton = document.getElementById('searchButton')
@@ -149,6 +147,15 @@ export class ActivityBarViewProvider implements vscode.WebviewViewProvider {
                 function updateSearchResults(searchResults) {
                     clearSearchResults();
                     const searchResultsList = document.getElementById('searchResults');
+
+                    if(searchResults.length == 0){
+                        const listElement = document.createElement('li');
+
+                        listElement.textContent = 'No result found';
+
+                        searchResultsList.appendChild(listElement)
+                        return 
+                    }
                     searchResults.forEach(result => {
                         const li = document.createElement('li');
                         const link = document.createElement('a');
@@ -169,26 +176,21 @@ export class ActivityBarViewProvider implements vscode.WebviewViewProvider {
                     const message = event.data;
                     if (message.command === 'updateSearchResults') {
                         updateSearchResults(message.searchResults);
-
+                        // buttonTimeout?.clearTimeout()
                         document.getElementById('searchButton').textContent= 'Search'
                     } 
                 });
                 searchButton.addEventListener('click', (e) =>{
+                    console.log('Searching')
                     clearSearchResults();
                     const searchQuery =  document.getElementById('searchInput').value;
                     vscode.postMessage({ command: 'searchFiles', searchQuery: searchQuery });
-                    setButtonState(true);
+                    // setButtonState(true);
                     document.getElementById('searchButton').textContent= 'Searching.........'
-                })
-
-
-                searchButton.addEventListener('change', (e) =>{
-                    const searchQuery =  document.getElementById('searchInput').value;
-                    if(searchQuery.length > 0){
-                        setButtonState(false);
-                    }else{
-                        setButtonState(true);
-                    }
+                    // buttonTimeout = setTimeOut(() =>{
+                    //     setButtonState(false);
+                    //     document.getElementById('searchButton').textContent= 'Search'
+                    // },3000)
                 })
             </script>
         </body>
